@@ -2,7 +2,10 @@
 @author: Gaetan Hadjeres
 """
 
+import torch
+from pathlib import Path
 import argparse
+from tqdm import tqdm
 
 from DatasetManager.chorale_dataset import ChoraleDataset
 from DatasetManager.dataset_manager import DatasetManager
@@ -10,6 +13,42 @@ from DatasetManager.metadata import FermataMetadata, TickMetadata, KeyMetadata
 
 from DeepBach.model_manager import DeepBach
 
+def inference_on_trainset(deepbach, dataset, num_iterations=500, output_dir="inference_outputs"):
+    """
+    For each sample in the training set, generate two harmonizations and save as MIDI.
+    """
+    # Get the same split as used for training
+    train_dl, _, _ = dataset.data_loaders(batch_size=1, split=(0.85, 0.10))
+
+    output_dir = Path(output_dir)
+    output_dir.mkdir(exist_ok=True)
+
+    for idx, (chorale_tensor, metadata_tensor) in tqdm(enumerate(train_dl), total=len(train_dl)):
+        # Remove batch dimension
+        chorale_tensor = chorale_tensor.squeeze(0)
+        metadata_tensor = metadata_tensor.squeeze(0)
+        
+        dataset.tensor_to_score(chorale_tensor).write('mid', fp = output_dir / f"train_sample_{idx}_input.mid")
+        torch.save(chorale_tensor, output_dir / f"train_sample_{idx}_input.pt")
+        torch.save(metadata_tensor, output_dir / f"train_sample_{idx}_meta.pt")
+
+        for run in range(2):
+            # Set the seed for reproducibility
+            torch.manual_seed(run)
+            if torch.cuda.is_available():
+                torch.cuda.manual_seed_all(run)
+
+            # Clone to avoid in-place modification
+            score, out_tensor_chorale, out_tensor_metadata = deepbach.generation(
+            num_iterations=num_iterations,
+            sequence_length_ticks=chorale_tensor.shape[1],
+            tensor_chorale=chorale_tensor.clone(),
+            tensor_metadata=metadata_tensor.clone(),
+            )
+
+            midi_path = output_dir / f"train_sample_{idx}_run_{run}.mid"
+            score.write('midi', fp=str(midi_path))
+            print(f"Saved: {midi_path}")
 
 def main():
     parser = argparse.ArgumentParser(description='DeepBach training and generation')
@@ -66,22 +105,22 @@ def main():
         linear_hidden_size=args.linear_hidden_size
     )
     
-    # inference_on_trainset(deepbach, bach_chorales_dataset)
+    inference_on_trainset(deepbach, bach_chorales_dataset)
 
-    if args.train:
-        deepbach.train(batch_size=args.batch_size,
-                       num_epochs=args.num_epochs)
-    else:
-        deepbach.load()
-        deepbach.cuda()
+    # if args.train:
+    #     deepbach.train(batch_size=args.batch_size,
+    #                    num_epochs=args.num_epochs)
+    # else:
+    #     deepbach.load()
+    #     deepbach.cuda()
 
-    print('Generation')
-    score, tensor_chorale, tensor_metadata = deepbach.generation(
-        num_iterations=args.num_iterations,
-        sequence_length_ticks=args.sequence_length_ticks,
-    )
-    score.show('txt')
-    score.show()
+    # print('Generation')
+    # score, tensor_chorale, tensor_metadata = deepbach.generation(
+    #     num_iterations=args.num_iterations,
+    #     sequence_length_ticks=args.sequence_length_ticks,
+    # )
+    # score.show('txt')
+    # score.show()
 
 
 if __name__ == '__main__':
