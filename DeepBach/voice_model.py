@@ -22,7 +22,8 @@ class VoiceModel(nn.Module):
                  num_layers: int,
                  lstm_hidden_size: int,
                  dropout_lstm: float,
-                 hidden_size_linear=200
+                 hidden_size_linear=200,
+                 device='cuda'
                  ):
         super(VoiceModel, self).__init__()
         self.dataset = dataset
@@ -83,9 +84,15 @@ class VoiceModel(nn.Module):
             nn.ReLU(),
             nn.Linear(hidden_size_linear, self.num_notes_per_voice[main_voice_index])
         )
+        self.device=device
+        self.to(device)
 
     def forward(self, *input):
         notes, metas = input
+        
+        # Move all note and meta tensors to the model's device
+        notes = tuple(t.to(self.device) if t is not None else None for t in notes)
+        metas = tuple(t.to(self.device) if t is not None else None for t in metas)
         batch_size, num_voices, timesteps_ticks = notes[0].size()
 
         # put time first
@@ -97,8 +104,6 @@ class VoiceModel(nn.Module):
         # embedding
         notes_embedded = self.embed(notes, type='note')
         metas_embedded = self.embed(metas, type='meta')
-        # lists of (N, timesteps_ticks, voices * dim_embedding)
-        # where timesteps_ticks is 1 for central parts
 
         # concat notes and metas
         input_embedded = [torch.cat([notes, metas], 2) if notes is not None else None
@@ -116,9 +121,9 @@ class VoiceModel(nn.Module):
         left = left[:, -1, :]
 
         if self.num_voices == 1:
-            center = cuda_variable(torch.zeros(
+            center = torch.zeros(
                 batch_size,
-                self.lstm_hidden_size)
+                self.lstm_hidden_size
             )
         else:
             center = center[:, 0, :]  # remove time dimension
@@ -155,6 +160,10 @@ class VoiceModel(nn.Module):
         batch_size, timesteps_right_ticks, num_voices = notes_or_metas[2].size()
 
         left, center, right = notes_or_metas
+        left = left.to(self.device)
+        if center is not None:
+            center = center.to(self.device)
+        right = right.to(self.device)
         # center has self.num_voices - 1 voices
         left_embedded = torch.cat([
             embeddings[voice_id](left[:, :, voice_id])[:, :, None, :]
