@@ -2,7 +2,7 @@
 @author: Gaetan Hadjeres
 """
 
-import click
+import argparse
 
 from DatasetManager.chorale_dataset import ChoraleDataset
 from DatasetManager.dataset_manager import DatasetManager
@@ -11,41 +11,32 @@ from DatasetManager.metadata import FermataMetadata, TickMetadata, KeyMetadata
 from DeepBach.model_manager import DeepBach
 
 
-@click.command()
-@click.option('--note_embedding_dim', default=20,
-              help='size of the note embeddings')
-@click.option('--meta_embedding_dim', default=20,
-              help='size of the metadata embeddings')
-@click.option('--num_layers', default=2,
-              help='number of layers of the LSTMs')
-@click.option('--lstm_hidden_size', default=256,
-              help='hidden size of the LSTMs')
-@click.option('--dropout_lstm', default=0.5,
-              help='amount of dropout between LSTM layers')
-@click.option('--linear_hidden_size', default=256,
-              help='hidden size of the Linear layers')
-@click.option('--batch_size', default=256,
-              help='training batch size')
-@click.option('--num_epochs', default=5,
-              help='number of training epochs')
-@click.option('--train', is_flag=True,
-              help='train the specified model for num_epochs')
-@click.option('--num_iterations', default=500,
-              help='number of parallel pseudo-Gibbs sampling iterations')
-@click.option('--sequence_length_ticks', default=64,
-              help='length of the generated chorale (in ticks)')
-def main(note_embedding_dim,
-         meta_embedding_dim,
-         num_layers,
-         lstm_hidden_size,
-         dropout_lstm,
-         linear_hidden_size,
-         batch_size,
-         num_epochs,
-         train,
-         num_iterations,
-         sequence_length_ticks,
-         ):
+def main():
+    parser = argparse.ArgumentParser(description='DeepBach training and generation')
+    parser.add_argument('--note_embedding_dim', type=int, default=20,
+                        help='size of the note embeddings')
+    parser.add_argument('--meta_embedding_dim', type=int, default=20,
+                        help='size of the metadata embeddings')
+    parser.add_argument('--num_layers', type=int, default=2,
+                        help='number of layers of the LSTMs')
+    parser.add_argument('--lstm_hidden_size', type=int, default=256,
+                        help='hidden size of the LSTMs')
+    parser.add_argument('--dropout_lstm', type=float, default=0.5,
+                        help='amount of dropout between LSTM layers')
+    parser.add_argument('--linear_hidden_size', type=int, default=256,
+                        help='hidden size of the Linear layers')
+    parser.add_argument('--batch_size', type=int, default=256,
+                        help='training batch size')
+    parser.add_argument('--num_epochs', type=int, default=5,
+                        help='number of training epochs')
+    parser.add_argument('--train', action='store_true',
+                        help='train the specified model for num_epochs')
+    parser.add_argument('--num_iterations', type=int, default=500,
+                        help='number of parallel pseudo-Gibbs sampling iterations')
+    parser.add_argument('--sequence_length_ticks', type=int, default=64,
+                        help='length of the generated chorale (in ticks)')
+
+    args = parser.parse_args()
     dataset_manager = DatasetManager()
 
     metadatas = [
@@ -67,25 +58,25 @@ def main(note_embedding_dim,
 
     deepbach = DeepBach(
         dataset=dataset,
-        note_embedding_dim=note_embedding_dim,
-        meta_embedding_dim=meta_embedding_dim,
-        num_layers=num_layers,
-        lstm_hidden_size=lstm_hidden_size,
-        dropout_lstm=dropout_lstm,
-        linear_hidden_size=linear_hidden_size
+        note_embedding_dim=args.note_embedding_dim,
+        meta_embedding_dim=args.meta_embedding_dim,
+        num_layers=args.num_layers,
+        lstm_hidden_size=args.lstm_hidden_size,
+        dropout_lstm=args.dropout_lstm,
+        linear_hidden_size=args.linear_hidden_size
     )
 
-    if train:
-        deepbach.train(batch_size=batch_size,
-                       num_epochs=num_epochs)
+    if args.train:
+        deepbach.train(batch_size=args.batch_size,
+                       num_epochs=args.num_epochs)
     else:
         deepbach.load()
         deepbach.cuda()
 
     print('Generation')
     score, tensor_chorale, tensor_metadata = deepbach.generation(
-        num_iterations=num_iterations,
-        sequence_length_ticks=sequence_length_ticks,
+        num_iterations=args.num_iterations,
+        sequence_length_ticks=args.sequence_length_ticks,
     )
     score.show('txt')
     score.show()
