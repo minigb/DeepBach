@@ -24,7 +24,8 @@ class ChoraleDataset(MusicDataset):
                  metadatas=None,
                  sequences_size=8,
                  subdivision=4,
-                 cache_dir=None):
+                 cache_dir=None,
+                 step=None):
         """
         :param corpus_it_gen: calling this function returns an iterator
         over chorales (as music21 scores)
@@ -33,6 +34,7 @@ class ChoraleDataset(MusicDataset):
         :param metadatas: list[Metadata], the list of used metadatas
         :param sequences_size: in beats
         :param subdivision: number of sixteenth notes per beat
+        -> tensor length: sequences_size * subdivision
         :param cache_dir: directory where tensor_dataset is stored
         """
         super(ChoraleDataset, self).__init__(cache_dir=cache_dir)
@@ -47,14 +49,19 @@ class ChoraleDataset(MusicDataset):
         self.voice_ranges = None  # in midi pitch
         self.metadatas = metadatas
         self.subdivision = subdivision
+        self.step = step
 
     def __repr__(self):
-        return f'ChoraleDataset(' \
+        name = f'ChoraleDataset(' \
                f'{self.voice_ids},' \
                f'{self.name},' \
                f'{[metadata.name for metadata in self.metadatas]},' \
                f'{self.sequences_size},' \
-               f'{self.subdivision})'
+               f'{self.subdivision}'
+        if self.step is not None:
+            name += f',{self.step}'
+        name += ')'
+        return name
 
     def iterator_gen(self):
         return (chorale
@@ -64,81 +71,62 @@ class ChoraleDataset(MusicDataset):
 
     def make_tensor_dataset(self):
         """
-        Implementation of the make_tensor_dataset abstract base class
+        Modified version: samples once per beat (i.e., every 4 subdivisions)
         """
-        # todo check on chorale with Chord
         print('Making tensor dataset')
         self.compute_index_dicts()
         self.compute_voice_ranges()
         one_tick = 1 / self.subdivision
         chorale_tensor_dataset = []
         metadata_tensor_dataset = []
-        for chorale_id, chorale in tqdm(enumerate(self.iterator_gen())):
 
-            # precompute all possible transpositions and corresponding metadatas
+        step = self.step if self.step is not None else one_tick
+
+        for chorale_id, chorale in tqdm(enumerate(self.iterator_gen())):
             chorale_transpositions = {}
             metadatas_transpositions = {}
 
-            # main loop
             for offsetStart in np.arange(
-                    chorale.flat.lowestOffset -
-                    (self.sequences_size - one_tick),
+                    chorale.flat.lowestOffset - (self.sequences_size - step),
                     chorale.flat.highestOffset,
-                    one_tick):
+                    step):
                 offsetEnd = offsetStart + self.sequences_size
                 current_subseq_ranges = self.voice_range_in_subsequence(
                     chorale,
                     offsetStart=offsetStart,
                     offsetEnd=offsetEnd)
 
-                transposition = self.min_max_transposition(current_subseq_ranges)
-                min_transposition_subsequence, max_transposition_subsequence = transposition
+                min_transposition, max_transposition = self.min_max_transposition(current_subseq_ranges)
 
-                for semi_tone in range(min_transposition_subsequence,
-                                       max_transposition_subsequence + 1):
+                for semi_tone in range(min_transposition, max_transposition + 1):
                     start_tick = int(offsetStart * self.subdivision)
                     end_tick = int(offsetEnd * self.subdivision)
 
                     try:
-                        # compute transpositions lazily
                         if semi_tone not in chorale_transpositions:
-                            (chorale_tensor,
-                             metadata_tensor) = self.transposed_score_and_metadata_tensors(
+                            chorale_tensor, metadata_tensor = self.transposed_score_and_metadata_tensors(
                                 chorale,
                                 semi_tone=semi_tone)
-                            chorale_transpositions.update(
-                                {semi_tone:
-                                     chorale_tensor})
-                            metadatas_transpositions.update(
-                                {semi_tone:
-                                     metadata_tensor})
+                            chorale_transpositions[semi_tone] = chorale_tensor
+                            metadatas_transpositions[semi_tone] = metadata_tensor
                         else:
                             chorale_tensor = chorale_transpositions[semi_tone]
                             metadata_tensor = metadatas_transpositions[semi_tone]
 
                         local_chorale_tensor = self.extract_score_tensor_with_padding(
-                            chorale_tensor,
-                            start_tick, end_tick)
+                            chorale_tensor, start_tick, end_tick)
                         local_metadata_tensor = self.extract_metadata_with_padding(
-                            metadata_tensor,
-                            start_tick, end_tick)
+                            metadata_tensor, start_tick, end_tick)
 
-                        # append and add batch dimension
-                        # cast to int
-                        chorale_tensor_dataset.append(
-                            local_chorale_tensor[None, :, :].int())
-                        metadata_tensor_dataset.append(
-                            local_metadata_tensor[None, :, :, :].int())
+                        chorale_tensor_dataset.append(local_chorale_tensor[None, :, :].int())
+                        metadata_tensor_dataset.append(local_metadata_tensor[None, :, :, :].int())
                     except KeyError:
-                        # some problems may occur with the key analyzer
                         print(f'KeyError with chorale {chorale_id}')
 
         chorale_tensor_dataset = torch.cat(chorale_tensor_dataset, 0)
         metadata_tensor_dataset = torch.cat(metadata_tensor_dataset, 0)
 
-        dataset = TensorDataset(chorale_tensor_dataset,
-                                metadata_tensor_dataset)
-
+        dataset = TensorDataset(chorale_tensor_dataset, metadata_tensor_dataset)
         print(f'Sizes: {chorale_tensor_dataset.size()}, {metadata_tensor_dataset.size()}')
         return dataset
 

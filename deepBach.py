@@ -84,19 +84,18 @@ def main():
        KeyMetadata()
     ]
     chorale_dataset_kwargs = {
-        'voice_ids':      [0, 1, 2, 3],
+        'voice_ids':      [0],
         'metadatas':      metadatas,
         'sequences_size': 8,
-        'subdivision':    4
+        'subdivision':    4,
+        'step':           4
     }
     bach_chorales_dataset: ChoraleDataset = dataset_manager.get_dataset(
         name='bach_chorales',
         **chorale_dataset_kwargs
         )
-    dataset = bach_chorales_dataset
-
     deepbach = DeepBach(
-        dataset=dataset,
+        dataset=bach_chorales_dataset,
         note_embedding_dim=args.note_embedding_dim,
         meta_embedding_dim=args.meta_embedding_dim,
         num_layers=args.num_layers,
@@ -106,22 +105,6 @@ def main():
     )
     
     inference_on_trainset(deepbach, bach_chorales_dataset)
-
-    # if args.train:
-    #     deepbach.train(batch_size=args.batch_size,
-    #                    num_epochs=args.num_epochs)
-    # else:
-    #     deepbach.load()
-    #     deepbach.cuda()
-
-    # print('Generation')
-    # score, tensor_chorale, tensor_metadata = deepbach.generation(
-    #     num_iterations=args.num_iterations,
-    #     sequence_length_ticks=args.sequence_length_ticks,
-    # )
-    # score.show('txt')
-    # score.show()
-
 
 if __name__ == '__main__':
     main()
