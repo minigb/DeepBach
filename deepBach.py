@@ -79,7 +79,7 @@ def main():
         sequence_length_ticks=args.sequence_length_ticks,
     )
     score.show('txt')
-    score.show()
+    score.write('midi', fp="result.midi")
 
 
 if __name__ == '__main__':
