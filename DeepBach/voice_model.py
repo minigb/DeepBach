@@ -129,6 +129,11 @@ class VoiceModel(nn.Module):
             center = center[:, 0, :]  # remove time dimension
             center = self.mlp_center(center)
 
+        left = left.to(self.device)
+        if center is not None:
+            center = center.to(self.device)
+        right = right.to(self.device)
+        
         hidden = init_hidden(
             num_layers=self.num_layers,
             batch_size=batch_size,
