@@ -77,7 +77,8 @@ def main():
                         help='number of parallel pseudo-Gibbs sampling iterations')
     parser.add_argument('--sequence_length_ticks', type=int, default=64,
                         help='length of the generated chorale (in ticks)')
-
+    parser.add_argument('--pretrained_dir', type=str, default='models/VoiceModel',
+                        help='Path to the pretrained model checkpoint')
     args = parser.parse_args()
     dataset_manager = DatasetManager()
 
@@ -104,9 +105,9 @@ def main():
         num_layers=args.num_layers,
         lstm_hidden_size=args.lstm_hidden_size,
         dropout_lstm=args.dropout_lstm,
-        linear_hidden_size=args.linear_hidden_size
+        linear_hidden_size=args.linear_hidden_size,
+        pretrained_dir=args.pretrained_dir
     )
-    
     inference_on_trainset(deepbach, bach_chorales_dataset)
 
 if __name__ == '__main__':

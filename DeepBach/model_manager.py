@@ -9,6 +9,7 @@ from DeepBach.helpers import cuda_variable, to_numpy
 
 from torch import optim, nn
 from tqdm import tqdm
+from pathlib import Path
 
 from DeepBach.voice_model import VoiceModel
 
@@ -22,24 +23,42 @@ class DeepBach:
                  lstm_hidden_size,
                  dropout_lstm,
                  linear_hidden_size,
+                 pretrained_dir=None
                  ):
         self.dataset = dataset
         self.num_voices = self.dataset.num_voices
         self.num_metas = len(self.dataset.metadatas) + 1
         self.activate_cuda = torch.cuda.is_available()
 
-        self.voice_models = [VoiceModel(
-            dataset=self.dataset,
-            main_voice_index=main_voice_index,
-            note_embedding_dim=note_embedding_dim,
-            meta_embedding_dim=meta_embedding_dim,
-            num_layers=num_layers,
-            lstm_hidden_size=lstm_hidden_size,
-            dropout_lstm=dropout_lstm,
-            hidden_size_linear=linear_hidden_size,
-        )
-            for main_voice_index in range(self.num_voices)
-        ]
+        if pretrained_dir is not None:
+            self.voice_models = []
+            for main_voice_index, f in enumerate(sorted(Path(pretrained_dir).glob("*"))):
+                model = VoiceModel(dataset=self.dataset,
+                            main_voice_index=main_voice_index,
+                            note_embedding_dim=note_embedding_dim,
+                            meta_embedding_dim=meta_embedding_dim,
+                            num_layers=num_layers,
+                            lstm_hidden_size=lstm_hidden_size,
+                            dropout_lstm=dropout_lstm,
+                            hidden_size_linear=linear_hidden_size,
+                        )
+                state_dict = torch.load(f)
+                model.load_state_dict(state_dict)
+                model.eval()
+                self.voice_models.append(model)
+        else:
+            self.voice_models = [VoiceModel(
+                dataset=self.dataset,
+                main_voice_index=main_voice_index,
+                note_embedding_dim=note_embedding_dim,
+                meta_embedding_dim=meta_embedding_dim,
+                num_layers=num_layers,
+                lstm_hidden_size=lstm_hidden_size,
+                dropout_lstm=dropout_lstm,
+                hidden_size_linear=linear_hidden_size,
+            )
+                for main_voice_index in range(self.num_voices)
+            ]
 
     def cuda(self, main_voice_index=None):
         if self.activate_cuda:
