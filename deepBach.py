@@ -13,6 +13,8 @@ from DatasetManager.metadata import FermataMetadata, TickMetadata, KeyMetadata
 
 from DeepBach.model_manager import DeepBach
 
+N_SAMPLES = 2
+
 def inference_on_trainset(deepbach, dataset, num_iterations=500, output_dir="inference_outputs"):
     """
     For each sample in the training set, generate two harmonizations and save as MIDI.
@@ -32,7 +34,7 @@ def inference_on_trainset(deepbach, dataset, num_iterations=500, output_dir="inf
         torch.save(chorale_tensor, output_dir / f"train_sample_{idx}_input.pt")
         torch.save(metadata_tensor, output_dir / f"train_sample_{idx}_meta.pt")
 
-        for run in range(2):
+        for run in range(N_SAMPLES):
             # Set the seed for reproducibility
             torch.manual_seed(run)
             if torch.cuda.is_available():
@@ -44,6 +46,7 @@ def inference_on_trainset(deepbach, dataset, num_iterations=500, output_dir="inf
             sequence_length_ticks=chorale_tensor.shape[1],
             tensor_chorale=chorale_tensor.clone(),
             tensor_metadata=metadata_tensor.clone(),
+            voice_index_range=[1,3]
             )
 
             midi_path = output_dir / f"train_sample_{idx}_run_{run}.mid"
@@ -84,7 +87,7 @@ def main():
        KeyMetadata()
     ]
     chorale_dataset_kwargs = {
-        'voice_ids':      [0],
+        'voice_ids':      [0, 1, 2, 3],
         'metadatas':      metadatas,
         'sequences_size': 8,
         'subdivision':    4,
